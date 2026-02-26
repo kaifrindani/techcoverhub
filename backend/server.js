@@ -25,7 +25,7 @@ app.use(
   cors({
     origin:
       process.env.NODE_ENV === "production"
-        ? ["https://your-frontend.vercel.app"] // 🔥 change later when deployed
+        ? ["https://YOUR-REAL-VERCEL-URL.vercel.app"] // 🔥 change later when deployed
         : "http://localhost:5173",
     credentials: true,
   })
