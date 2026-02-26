@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 
-const IMAGE_BASE_URL = "http://localhost:5000";
+const IMAGE_BASE_URL = import.meta.env.VITE_API_URL;
 
 export default function Products() {
   const { user, logout } = useAuth(); // ✅ use user + logout
@@ -25,8 +25,6 @@ export default function Products() {
 
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-
-  /* ================= API ================= */
 
   const fetchProducts = async () => {
     try {
