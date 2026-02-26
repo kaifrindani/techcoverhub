@@ -1,22 +1,21 @@
 import { useEffect, useState } from "react";
+import api from "../api/axios";
+import { useAuth } from "../context/AuthContext";
 
-const API_URL = "http://localhost:5000/api/products";
-const IMAGE_BASE_URL = "http://localhost:5000"; // adjust if needed
+const IMAGE_BASE_URL = "http://localhost:5000";
 
 export default function Products() {
+  const { user, logout } = useAuth(); // ✅ use user + logout
+
   /* ================= STATE ================= */
 
   const [products, setProducts] = useState([]);
-
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(5);
   const [totalPages, setTotalPages] = useState(1);
-
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-
   const [loading, setLoading] = useState(false);
-
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [currentProduct, setCurrentProduct] = useState(null);
@@ -32,14 +31,16 @@ export default function Products() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const res = await fetch(
-        `${API_URL}?page=${page}&limit=${limit}&search=${debouncedSearch}`
+
+      const res = await api.get(
+        `/products?page=${page}&limit=${limit}&search=${debouncedSearch}`
       );
-      const data = await res.json();
-      setProducts(data.products || []);
-      setTotalPages(data.totalPages || 1);
+
+      setProducts(res.data.products || []);
+      setTotalPages(res.data.totalPages || 1);
     } catch (err) {
       console.error(err);
+      // 401 handled globally in axios interceptor
     } finally {
       setLoading(false);
     }
@@ -47,7 +48,8 @@ export default function Products() {
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this product?")) return;
-    await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+
+    await api.delete(`/products/${id}`);
     fetchProducts();
   };
 
@@ -57,7 +59,9 @@ export default function Products() {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    if (imagePreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreview);
+    }
 
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
@@ -72,7 +76,7 @@ export default function Products() {
     Object.entries(formData).forEach(([k, v]) => fd.append(k, v));
     if (imageFile) fd.append("image", imageFile);
 
-    await fetch(`${API_URL}/add`, { method: "POST", body: fd });
+    await api.post("/products/add", fd);
 
     closeModal();
     fetchProducts();
@@ -85,10 +89,7 @@ export default function Products() {
     Object.entries(formData).forEach(([k, v]) => fd.append(k, v));
     if (imageFile) fd.append("image", imageFile);
 
-    await fetch(`${API_URL}/${currentProduct._id}`, {
-      method: "PUT",
-      body: fd,
-    });
+    await api.put(`/products/${currentProduct._id}`, fd);
 
     closeModal();
     fetchProducts();
@@ -117,7 +118,10 @@ export default function Products() {
   };
 
   const closeModal = () => {
-    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    if (imagePreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
     setIsAddOpen(false);
     setIsEditOpen(false);
     setCurrentProduct(null);
@@ -147,9 +151,16 @@ export default function Products() {
 
   return (
     <div style={{ padding: 20 }}>
-      <h2>Admin – Products</h2>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <h2>Products</h2>
+        <div>
+          <span style={{ marginRight: 15 }}>
+            Logged in as: <strong>{user?.role}</strong>
+          </span>
+          <button onClick={logout}>🚪 Logout</button>
+        </div>
+      </div>
 
-      {/* Controls */}
       <div style={{ marginBottom: 10 }}>
         <input
           placeholder="Search products..."
@@ -166,16 +177,20 @@ export default function Products() {
           style={{ marginLeft: 10 }}
         >
           {[5, 10, 20, 50].map((n) => (
-            <option key={n} value={n}>{n}</option>
+            <option key={n} value={n}>
+              {n}
+            </option>
           ))}
         </select>
 
-        <button onClick={openAdd} style={{ marginLeft: 10 }}>
-          ➕ Add Product
-        </button>
+        {/* ✅ Admin Only Add Button */}
+        {user?.role === "admin" && (
+          <button onClick={openAdd} style={{ marginLeft: 10 }}>
+            ➕ Add Product
+          </button>
+        )}
       </div>
 
-      {/* Table */}
       {loading ? (
         <p>Loading...</p>
       ) : products.length === 0 ? (
@@ -189,7 +204,7 @@ export default function Products() {
               <th>Category</th>
               <th>Stock</th>
               <th>Image</th>
-              <th>Actions</th>
+              {user?.role === "admin" && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -201,20 +216,29 @@ export default function Products() {
                 <td>{p.stock}</td>
                 <td>
                   {p.image && (
-                    <img src={IMAGE_BASE_URL + p.image} width="50" />
+                    <img
+                      src={IMAGE_BASE_URL + p.image}
+                      width="50"
+                      alt=""
+                    />
                   )}
                 </td>
-                <td>
-                  <button onClick={() => openEdit(p)}>Edit</button>
-                  <button onClick={() => handleDelete(p._id)}>Delete</button>
-                </td>
+
+                {/* ✅ Admin Only Actions */}
+                {user?.role === "admin" && (
+                  <td>
+                    <button onClick={() => openEdit(p)}>Edit</button>
+                    <button onClick={() => handleDelete(p._id)}>
+                      Delete
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       )}
 
-      {/* Pagination */}
       <div style={{ marginTop: 10 }}>
         <button disabled={page === 1} onClick={() => setPage(page - 1)}>
           Prev
@@ -222,27 +246,53 @@ export default function Products() {
         <span style={{ margin: "0 10px" }}>
           Page {page} of {totalPages}
         </span>
-        <button disabled={page === totalPages} onClick={() => setPage(page + 1)}>
+        <button
+          disabled={page === totalPages}
+          onClick={() => setPage(page + 1)}
+        >
           Next
         </button>
       </div>
 
-      {/* Modal */}
       {(isAddOpen || isEditOpen) && (
         <form onSubmit={isEditOpen ? handleUpdate : handleAdd}>
           <h3>{isEditOpen ? "Edit" : "Add"} Product</h3>
 
-          <input name="name" required value={formData.name} onChange={handleChange} />
-          <input name="price" type="number" required value={formData.price} onChange={handleChange} />
-          <input name="category" required value={formData.category} onChange={handleChange} />
-          <input name="stock" type="number" required value={formData.stock} onChange={handleChange} />
+          <input
+            name="name"
+            required
+            value={formData.name}
+            onChange={handleChange}
+          />
+          <input
+            name="price"
+            type="number"
+            required
+            value={formData.price}
+            onChange={handleChange}
+          />
+          <input
+            name="category"
+            required
+            value={formData.category}
+            onChange={handleChange}
+          />
+          <input
+            name="stock"
+            type="number"
+            required
+            value={formData.stock}
+            onChange={handleChange}
+          />
 
           <input type="file" accept="image/*" onChange={handleImageChange} />
 
-          {imagePreview && <img src={imagePreview} width="100" />}
+          {imagePreview && <img src={imagePreview} width="100" alt="" />}
 
           <button type="submit">Save</button>
-          <button type="button" onClick={closeModal}>Cancel</button>
+          <button type="button" onClick={closeModal}>
+            Cancel
+          </button>
         </form>
       )}
     </div>
