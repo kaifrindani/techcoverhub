@@ -15,21 +15,27 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 
-/* ================= STATIC FILES (IMAGES) ================= */
-// 🔥 This is what was missing
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
 /* ================= CORS ================= */
 
 app.use(
   cors({
     origin: [
+      "https://techoverhub.vercel.app", // 🔥 YOUR REAL VERCEL URL
       "http://localhost:5173",
-      "https://techoverhub.vercel.app"
     ],
     credentials: true,
   })
 );
+
+/* ================= STATIC FILES ================= */
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+/* ================= TEST ROUTE ================= */
+
+app.get("/", (req, res) => {
+  res.send("Server is running 🚀");
+});
 
 /* ================= ROUTES ================= */
 
